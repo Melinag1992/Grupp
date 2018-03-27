@@ -6,13 +6,13 @@ import android.support.annotation.Nullable;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.LinearLayoutManager;
 import android.support.v7.widget.RecyclerView;
+import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 import android.widget.Toast;
 
 import com.example.c4q.capstone.R;
 import com.firebase.ui.database.FirebaseRecyclerAdapter;
-import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.database.DatabaseError;
@@ -24,24 +24,24 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import static com.example.c4q.capstone.utils.Constants.FRIEND_REQUESTS;
-import static com.example.c4q.capstone.utils.Constants.NOTIFICATIONS;
+import static com.example.c4q.capstone.utils.Constants.FRIENDS;
+import static com.example.c4q.capstone.utils.Constants.FRIEND_REQUEST;
 import static com.example.c4q.capstone.utils.Constants.NOT_FRIENDS;
-import static com.example.c4q.capstone.utils.Constants.RECEIVED;
+import static com.example.c4q.capstone.utils.Constants.PENDING;
+import static com.example.c4q.capstone.utils.Constants.PRIVATE_USER;
 import static com.example.c4q.capstone.utils.Constants.REQUEST_SENT;
-import static com.example.c4q.capstone.utils.Constants.REQUEST_TYPE;
 import static com.example.c4q.capstone.utils.Constants.SENT;
-import static com.example.c4q.capstone.utils.Constants.USER_FRIENDS;
 import static com.example.c4q.capstone.utils.Constants.USER_SEARCH;
 
 public class UserSearchActivity extends AppCompatActivity {
+    private static final String TAG = "UserSearchActivity";
     private RecyclerView searchResultsList;
     private FirebaseAuth authentication;
-    private DatabaseReference rootRef, searchUserDatabase, friendReqDatabase, friendsListDatabase;
+    private DatabaseReference rootRef, searchUserDatabase, pendingFriendRequestsNode;
     private LinearLayoutManager linearLayoutManager;
     private FirebaseUser currentUser;
-    private List<String> userFriendList = new ArrayList<>();
     private String currentState, currentUserID, currentUserEmail;
+    private List<String> pendingFriendRequestsList = new ArrayList<>();
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -49,9 +49,9 @@ public class UserSearchActivity extends AppCompatActivity {
         setContentView(R.layout.activity_user_search);
 
         rootRef = FirebaseDatabase.getInstance().getReference();
+
         searchUserDatabase = rootRef.child(USER_SEARCH);
-        friendReqDatabase = rootRef.child(FRIEND_REQUESTS);
-        friendsListDatabase = rootRef.child(USER_FRIENDS);
+        pendingFriendRequestsNode = rootRef.child(PENDING);
 
         linearLayoutManager = new LinearLayoutManager(this);
 
@@ -90,6 +90,8 @@ public class UserSearchActivity extends AppCompatActivity {
                         viewHolder.requestFriendBtn.setOnClickListener(new View.OnClickListener() {
                             @Override
                             public void onClick(View v) {
+
+
                                 sendRequest(requestFriend, viewHolder.requestFriendBtn);
                             }
                         });
@@ -111,52 +113,42 @@ public class UserSearchActivity extends AppCompatActivity {
     private void sendRequest(final String requestedID, final Button requestBtn) {
 
         /**
-         *sends friend requests
+         * sends friend requests
          */
 
-        if (currentState.equals(NOT_FRIENDS)) {
+        if (currentState == NOT_FRIENDS && currentUserID != requestedID) {
 
             searchUserDatabase = rootRef.child(requestedID).push();
             String newNotificationId = searchUserDatabase.getKey();
 
             HashMap<String, String> notificationData = new HashMap<>();
-            notificationData.put("from", currentUserEmail);
-            notificationData.put("type", FRIEND_REQUESTS);
+            notificationData.put(FRIEND_REQUEST, currentUserID);
 
             Map<String, Object> requestMap = new HashMap<>();
-            requestMap.put(FRIEND_REQUESTS + "/" + currentUserID + "/" + requestedID + "/" + REQUEST_TYPE, SENT);
-            requestMap.put(FRIEND_REQUESTS + "/" + requestedID + "/" + currentUserID + "/" + REQUEST_TYPE, RECEIVED);
-            requestMap.put(NOTIFICATIONS + "/" + requestedID + "/" + newNotificationId, notificationData);
-
+            requestMap.put(PRIVATE_USER + "/" + requestedID + "/" + PENDING + "/" + newNotificationId, notificationData);
 
             rootRef.updateChildren(requestMap, new DatabaseReference.CompletionListener() {
                 @Override
                 public void onComplete(DatabaseError databaseError, DatabaseReference databaseReference) {
                     if (databaseError != null) {
-                        Toast.makeText(UserSearchActivity.this, "There was some error in sending request", Toast.LENGTH_SHORT).show();
+                        Toast.makeText(UserSearchActivity.this, "Error: Request not sent", Toast.LENGTH_SHORT).show();
                     } else {
-                        userFriendList.add(requestedID);
-                        friendsListDatabase.child(currentUserID).setValue(userFriendList);
 
+                        pendingFriendRequestsList.add(requestedID);
+                        requestBtn.setText("Pending");
                         currentState = REQUEST_SENT;
+
                     }
-                }
-            });
-        }
 
 
-        if (currentState.equals(REQUEST_SENT)) {
+                    Log.d(TAG, "sendRequest: " + pendingFriendRequestsList.toString());
+                    Log.d(TAG, "sendRequest: " + requestedID + " " + currentState);
 
-            friendReqDatabase.child(currentUserID).child(requestedID).removeValue().addOnSuccessListener(new OnSuccessListener<Void>() {
-                @Override
-                public void onSuccess(Void v) {
-                    requestBtn.setText("Add Friend");
-
-                    currentState = NOT_FRIENDS;
                 }
             });
 
         }
+
     }
 
 }
